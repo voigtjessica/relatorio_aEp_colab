@@ -1,0 +1,302 @@
+---
+title: "Relatório Achados e Pedidos"
+author: "Jessica Voigt"
+date: "21 de junho de 2018"
+output: word_document
+---
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+# https://docs.google.com/document/d/1ay-kHtFwapHvSF9-jZmYGNvhChbEfXKBp_V0PQOf_cc/edit?usp=sharing
+
+# Temporariamente vou usar um banco não completo, apenas para plotar os gráficos.
+# load("database_ped_sem_cgu.Rdata")
+load("C:/Users/jvoig/OneDrive/Documentos/relatorio_aEp_colab/database_pedidos_colab.RData")
+
+# base <- database_ped_sem_cgu  #!!!! mudar aqui !!!!
+base <- database_pedidos_colab
+
+library(dplyr)
+library(waffle)
+library(ggplot2)
+library(flextable)
+library(tidyr)
+library(janitor)
+library(stringr)
+library(RColorBrewer)
+# display.brewer.all()
+
+perc <- function(x) { 
+  paste0(round(x,2)*100, "%")
+}
+
+
+num1 <- base %>%
+  filter(interacao == "Pedido") %>%
+  nrow()
+
+# ver depois como inserir aqueles que não são pedidos de informação
+
+```
+
+## Sumário executivo:
+
+Foram analisados entre abril e junho `r num1` pedidos de acesso à informação obtidos pela Transparência Brasil
+
+## Gráficos 
+### Para quem os pedidos são feitos?
+```{r, message=FALSE, warning=FALSE, echo=FALSE, fig.width=11, fig.height=9}
+# 1. Quantidade de pedidos por poder (gráfico)
+# formato?
+# - número de absoluto
+# - porcentagem de cada poder em relação ao total de pedidos	
+
+
+base %>%
+  filter(interacao == "Pedido") %>%
+  group_by(poder) %>%
+  summarise(pedidos = n(),
+            percentual = round(pedidos/7634,2)*100) %>% #mudar quando acrescetar CGU
+  mutate(perc = perc(percentual)) %>%
+  ggplot(aes(x=reorder(poder, percentual), y=percentual)) +
+  geom_bar(stat = "identity", width=.95, 
+           fill=c("#1E2835",
+                  "#1B5760",
+                  "#40A47B",
+                  "#75C778",
+                  "#C5EB6D")) +
+  scale_y_continuous() + #mudar o max quando acrescentar cgu
+  ggtitle('Pedidos por poder') +
+  labs(caption="Fonte: Transparência Brasil",
+       x = "",
+       y = "%") +
+  geom_text(aes(x = poder, y = percentual, label = paste0(percentual, "%")), size = 5 ,
+            color=rgb(100,100,100, maxColorValue=255), 
+            vjust=-0.5) +
+  theme_minimal(base_size = 15) + 
+  theme(axis.text.x = element_text(angle=25, vjust=0.6, size=14),
+        axis.text.y = element_text(size=14),
+        plot.margin = margin(0.5, 0.5, 0.5, 1, unit = "cm"))
+
+
+  
+```
+  
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+base %>%
+  filter(interacao == "Pedido") %>%
+  group_by(poder) %>%
+  summarise(pedidos = n(),
+            percentual = pedidos/7634) %>% #mudar quando acrescetar CGU
+  arrange(desc(pedidos)) %>%
+  adorn_totals("row") %>%
+  mutate(percentual = perc(percentual)) %>%
+  regulartable() %>%
+  theme_vanilla() %>% 
+  autofit() %>%
+  align(align = "center", part = "body") %>%
+  align(align = "center", part = "header") 
+```
+  
+2. Para qual nível federativo existem mais pedidos de informação?
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+base %>%
+  filter(interacao == "Pedido") %>%
+  mutate(esfera = if_else(esfera == "Distrital", "Estadual", esfera)) %>%
+  group_by(esfera) %>%
+  summarise(pedidos = n(),
+            percentual = pedidos/7634) %>%
+  mutate(percentual = perc(percentual)) %>%
+  ggplot(aes(x=reorder(esfera, pedidos), y=pedidos)) +
+  geom_bar(stat = "identity", width=.5) +
+  # scale_y_continuous(breaks=seq(0, 5000,by=500)) + #mudar o max quando acrescentar cgu
+  scale_fill_manual(values=c("#573A51", "#38E3D7", "#655F80")) +
+  labs(title="Pedidos por esfera", 
+       caption="Fonte: Transparência Brasil",
+       x = "",
+       y = "Pedidos de acesso à informação") +
+  geom_text(aes(x = esfera, y = pedidos, label = percentual), size = 3 ,
+            color=rgb(100,100,100, maxColorValue=255), 
+            vjust=-0.5) +
+  theme_minimal(base_size = 10) + 
+  theme(axis.text.x = element_text(angle=25, vjust=0.6))
+
+```
+
+  
+2. Quantidade de pedidos por nível federativo (todos os órgãos) - tabela
+    
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+# 
+# formato?
+# - número de absoluto
+# - porcentagem de cada nível em relação ao total de pedidos
+
+base %>%
+  filter(interacao == "Pedido") %>%
+  mutate(esfera = if_else(esfera == "Distrital", "Estadual", esfera)) %>%
+  group_by(esfera) %>%
+  summarise(pedidos_por_esfera = n(),
+            percentual = pedidos_por_esfera/7634) %>%
+  arrange(desc(pedidos_por_esfera)) %>%
+  adorn_totals("row") %>%
+  mutate(percentual = perc(percentual)) %>%
+  regulartable() %>%
+  theme_vanilla() %>% 
+  autofit() %>%
+  align(align = "center", part = "body") %>%
+  align(align = "center", part = "header")
+
+```
+  
+3. Tabela
+Linhas (poderes)
+Colunas (nível federativo)
+Valor (quantidade de pedidos)
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+base %>%
+  filter(interacao == "Pedido") %>%
+  mutate(esfera = if_else(esfera == "Distrital", "Estadual", esfera)) %>%
+  group_by(poder, esfera) %>%
+  summarise(pedidos = n()) %>%
+  spread(esfera, pedidos) %>%
+  mutate_all(funs(replace(., is.na(.), 0))) %>%
+  adorn_totals("col") %>%
+  arrange(desc(Total)) %>%
+  adorn_totals("row")  %>%
+  mutate_if(is.numeric, as.integer) %>%
+  regulartable() %>%
+  theme_vanilla() %>%
+  autofit() %>%
+  align(align = "center", part = "body") %>%
+  align(align = "center", part = "header")
+
+```
+
+## Como o poder público responde aos pedidos feitos via LAI?
+    
+4.  Atendimento por poder (gráfico)
+Porcentagem de Atendido, não atendido, parcialmente atendido e não classificado por poder
+(se possível, colocar linha de total no final)
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+
+aux <- base %>%
+  filter(interacao == "Pedido") %>%
+  filter(!is.na(atendimento),             ## retirar esse filtro      
+         atendimento != "Não Classificado") %>%  
+  ungroup() %>%
+  group_by(poder, atendimento) %>%
+  summarise(pedidos = n()) %>%
+  ungroup() %>%
+  group_by(poder) %>%
+  mutate(total = sum(pedidos, na.rm=T),
+         perc = round(pedidos/total, 2)) 
+
+aux %>%
+  ggplot(aes(fill=atendimento, x = atendimento, y = perc)) + ## y pedidos
+  geom_bar(position="dodge", stat="identity") + 
+  scale_fill_manual(values=c("#573A51", "#38E3D7", "#655F80")) +
+  scale_y_continuous(labels = scales::percent) + # remover
+  xlab("") +
+  theme_minimal(base_size = 11) +
+  facet_grid( ~poder, scales = "free_y") +
+  theme(legend.position = "top",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  ylab("Percentual") + 
+  geom_text(aes(x = atendimento, y = perc , label = perc(perc)), size = 3 ,
+            color=rgb(100,100,100, maxColorValue=255), 
+            vjust=-0.5)
+
+```
+
+5. Atendimento por nível federativo (gráfico)
+Porcentagem de Atendido, não atendido, parcialmente atendido por nível federativo
+
+
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
+aux2 <- base %>%
+  filter(interacao == "Pedido") %>%
+  filter(!is.na(atendimento),
+         atendimento != "Não Classificado") %>%     ## retirar esse filtro
+  mutate(esfera = if_else(esfera == "Distrital" , "Estadual", esfera))  %>%
+  ungroup() %>%
+  group_by(esfera, atendimento) %>%
+  summarise(pedidos = n()) %>%
+  ungroup() %>%
+  group_by(esfera) %>%
+  mutate(total = sum(pedidos, na.rm=T),
+         perc = round(pedidos/total, 2)) 
+
+aux2 %>%
+  ggplot(aes(fill=atendimento, x = atendimento, y = perc)) + ## y pedidos
+  geom_bar(position="dodge", stat="identity") + 
+  scale_y_continuous(labels = scales::percent) + # remover
+  scale_fill_manual(values=c("#573A51", "#38E3D7", "#655F80")) +
+  xlab("") +
+  theme_minimal(base_size = 11) +
+  facet_grid( ~esfera, scales = "free_y") +
+  theme(legend.position = "top",
+        axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank()) +
+  geom_text(aes(x = atendimento, y = perc , label = perc(perc)), size = 3 ,
+            color=rgb(100,100,100, maxColorValue=255), 
+            vjust=-0.5) +
+  ylab("Percentual")
+```
+
+## Gráficos por poder
+
+[ 10 temas mais perguntados
+Quais são os temas mais perguntados por poder?
+Gráfico de barras empilhadas
+Com atendimento, atendimento parcial e não atendimento por órgão
+Ordenar por quantidade de pedidos
+Incluir rótulo de dados ]
+
+Para determinar os temas que agrupariam os pedidos, a Transparência Brasil 
+
+
+```{r}
+
+aux3 <- base %>%
+  filter(!is.na(assunto),
+         !is.na(atendimento),
+         atendimento != "Não Classificado") %>%            # Retirar esse filtro
+  mutate(assunto_limpo = gsub('[[:digit:]]+', '', assunto),
+         assunto_limpo = gsub("[.]","",assunto_limpo),
+         assunto_limpo = str_to_title(assunto_limpo),
+         assunto_limpo = gsub("[[:punct:]]", "", assunto_limpo)) %>%
+  group_by(poder, assunto_limpo, atendimento) %>%
+  summarise(pedidos = n()) %>%
+  ungroup() %>%
+  group_by(poder, assunto_limpo) %>%
+  mutate(total_assunto = sum(pedidos, na.rm=TRUE),
+         percentual_assunto = pedidos/total_assunto) %>%
+  spread(key=atendimento, value=pedidos, fill=0) %>%
+  clean_names() %>%
+  group_by(poder, assunto_limpo) %>%
+  summarise(total_assunto = max(total_assunto),
+            atendido = max(atendido),
+            nao_atendido = max(nao_atendido),
+            pacial_atendido = max(parcialmente_atendido)) %>%
+  ungroup() %>%
+  group_by(poder) %>%
+  mutate(total_poder = sum(total_assunto)) %>%
+  distinct(assunto_limpo, .keep_all=TRUE) %>%
+  top_n(., n = 5, wt = total_assunto ) %>%
+  gather(atendimento, pedidos, 4:6) %>%
+    mutate(percentual_pedido_poder = pedidos/total_poder,
+         perc_pedido_poder = perc(percentual_pedido_poder))
+
+
+
